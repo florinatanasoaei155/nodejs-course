@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node.js Async Execution Order - Visual Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .demo-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .demo-section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.8em;
+        }
+
+        .output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+
+        .log-entry {
+            padding: 8px;
+            margin: 4px 0;
+            border-radius: 4px;
+            animation: slideIn 0.3s ease-out;
+            display: flex;
+            align-items: center;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .log-entry .timestamp {
+            color: #858585;
+            margin-right: 10px;
+            min-width: 80px;
+        }
+
+        .log-entry .type-badge {
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-right: 10px;
+            font-weight: bold;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        .sync { background: #4caf50; color: white; }
+        .async { background: #ff9800; color: white; }
+        .promise { background: #2196f3; color: white; }
+        .microtask { background: #9c27b0; color: white; }
+        .timeout { background: #f44336; color: white; }
+
+        .explanation {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .explanation h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .explanation ul {
+            margin-left: 20px;
+        }
+
+        .explanation li {
+            margin: 5px 0;
+            color: #333;
+        }
+
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+        }
+
+        .keyword { color: #569cd6; }
+        .string { color: #ce9178; }
+        .function { color: #dcdcaa; }
+        .comment { color: #6a9955; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Node.js Async Execution Order - Visual Demo</h1>
+
+        <div class="controls">
+            <button onclick="runDemo1()">Demo 1: Basic Order</button>
+            <button onclick="runDemo2()">Demo 2: Promise Chain</button>
+            <button onclick="runDemo3()">Demo 3: Async/Await</button>
+            <button onclick="runDemo4()">Demo 4: Mixed Everything</button>
+            <button onclick="clearOutput()">Clear Output</button>
+        </div>
+
+        <div class="demo-section">
+            <h2>Execution Log</h2>
+            <div id="output" class="output"></div>
+        </div>
+
+        <div class="demo-section">
+            <div class="explanation">
+                <h3>Understanding the Event Loop</h3>
+                <ul>
+                    <li><strong style="color: #4caf50;">Synchronous (GREEN):</strong> Executes immediately, blocks the thread</li>
+                    <li><strong style="color: #9c27b0;">Microtask/Promise (PURPLE):</strong> Queued in microtask queue, runs after current script but before macrotasks</li>
+                    <li><strong style="color: #f44336;">setTimeout (RED):</strong> Queued in macrotask queue, runs after microtasks</li>
+                    <li><strong style="color: #2196f3;">Promise (BLUE):</strong> Creates a promise that may resolve synchronously or asynchronously</li>
+                    <li><strong style="color: #ff9800;">Async/Await (ORANGE):</strong> Syntactic sugar over promises</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <h2>Demo Code Examples</h2>
+
+            <h3>Demo 1: Basic Execution Order</h3>
+            <div class="code-block">
+<span class="keyword">console</span>.<span class="function">log</span>(<span class="string">'1. Synchronous start'</span>);
+
+<span class="function">setTimeout</span>(() => {
+    <span class="keyword">console</span>.<span class="function">log</span>(<span class="string">'2. setTimeout 0ms'</span>);
+}, <span class="string">0</span>);
+
+<span class="keyword">Promise</span>.<span class="function">resolve</span>().<span class="function">then</span>(() => {
+    <span class="keyword">console</span>.<span class="function">log</span>(<span class="string">'3. Promise.then'</span>);
+});
+
+<span class="keyword">console</span>.<span class="function">log</span>(<span class="string">'4. Synchronous end'</span>);
+
+<span class="comment">// Order: 1 → 4 → 3 → 2</span>
+            </div>
+
+            <h3>Demo 2: Promise Chain</h3>
+            <div class="code-block">
+<span class="keyword">Promise</span>.<span class="function">resolve</span>(<span class="string">'Step 1'</span>)
+    .<span class="function">then</span>(<span class="keyword">result</span> => {
+        <span class="keyword">console</span>.<span class="function">log</span>(result);
+        <span class="keyword">return</span> <span class="string">'Step 2'</span>;
+    })
+    .<span class="function">then</span>(<span class="keyword">result</span> => {
+        <span class="keyword">console</span>.<span class="function">log</span>(result);
+    });
+            </div>
+
+            <h3>Demo 3: Async/Await</h3>
+            <div class="code-block">
+<span class="keyword">async function</span> <span class="function">demo</span>() {
+    <span class="keyword">console</span>.<span class="function">log</span>(<span class="string">'Start async'</span>);
+
+    <span class="keyword">await</span> <span class="keyword">Promise</span>.<span class="function">resolve</span>();
+    <span class="keyword">console</span>.<span class="function">log</span>(<span class="string">'After await'</span>);
+
+    <span class="keyword">const</span> result = <span class="keyword">await</span> <span class="function">delay</span>(<span class="string">1000</span>);
+    <span class="keyword">console</span>.<span class="function">log</span>(result);
+}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let startTime;
+        let logCounter = 0;
+
+        function initTimer() {
+            startTime = Date.now();
+            logCounter = 0;
+        }
+
+        function getTimestamp() {
+            return `${(Date.now() - startTime).toString().padStart(4, '0')}ms`;
+        }
+
+        function log(message, type = 'sync') {
+            logCounter++;
+            const output = document.getElementById('output');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+
+            const timestamp = document.createElement('span');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = getTimestamp();
+
+            const badge = document.createElement('span');
+            badge.className = `type-badge ${type}`;
+            badge.textContent = type.toUpperCase();
+
+            const text = document.createElement('span');
+            text.textContent = `${logCounter}. ${message}`;
+
+            entry.appendChild(timestamp);
+            entry.appendChild(badge);
+            entry.appendChild(text);
+
+            output.appendChild(entry);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        // Demo 1: Basic execution order
+        function runDemo1() {
+            clearOutput();
+            initTimer();
+
+            log('Script starts - synchronous code', 'sync');
+
+            setTimeout(() => {
+                log('setTimeout 0ms callback executed', 'timeout');
+            }, 0);
+
+            setTimeout(() => {
+                log('setTimeout 100ms callback executed', 'timeout');
+            }, 100);
+
+            Promise.resolve().then(() => {
+                log('Promise.then (microtask) executed', 'microtask');
+            });
+
+            Promise.resolve().then(() => {
+                log('Another Promise.then (microtask)', 'microtask');
+            });
+
+            log('Script ends - synchronous code', 'sync');
+        }
+
+        // Demo 2: Promise chain
+        function runDemo2() {
+            clearOutput();
+            initTimer();
+
+            log('Promise chain demo starts', 'sync');
+
+            Promise.resolve('Initial value')
+                .then(result => {
+                    log(`Promise step 1: ${result}`, 'promise');
+                    return 'Second value';
+                })
+                .then(result => {
+                    log(`Promise step 2: ${result}`, 'promise');
+                    return 'Third value';
+                })
+                .then(result => {
+                    log(`Promise step 3: ${result}`, 'promise');
+                });
+
+            log('Promise chain registered', 'sync');
+
+            setTimeout(() => {
+                log('setTimeout executed after promises', 'timeout');
+            }, 0);
+        }
+
+        // Demo 3: Async/Await
+        async function runDemo3() {
+            clearOutput();
+            initTimer();
+
+            log('Async function starts', 'sync');
+
+            async function asyncDemo() {
+                log('Inside async function - before await', 'async');
+
+                await Promise.resolve();
+                log('After first await (microtask)', 'async');
+
+                await new Promise(resolve => setTimeout(resolve, 100));
+                log('After await with 100ms delay', 'async');
+
+                const result = await Promise.resolve('Awaited value');
+                log(`Got result: ${result}`, 'async');
+            }
+
+            asyncDemo();
+
+            log('Async function called (continues synchronously)', 'sync');
+
+            Promise.resolve().then(() => {
+                log('Regular promise.then', 'microtask');
+            });
+        }
+
+        // Demo 4: Mixed everything
+        async function runDemo4() {
+            clearOutput();
+            initTimer();
+
+            log('1. Synchronous start', 'sync');
+
+            setTimeout(() => {
+                log('5. setTimeout 0ms (macrotask)', 'timeout');
+            }, 0);
+
+            setTimeout(() => {
+                log('7. setTimeout 50ms (macrotask)', 'timeout');
+            }, 50);
+
+            Promise.resolve().then(() => {
+                log('3. Promise.then #1 (microtask)', 'microtask');
+            });
+
+            async function asyncFunc() {
+                log('2. Async function start (sync part)', 'sync');
+
+                await Promise.resolve();
+                log('4. After await (microtask)', 'async');
+
+                setTimeout(() => {
+                    log('8. setTimeout inside async (macrotask)', 'timeout');
+                }, 0);
+
+                await new Promise(resolve => setTimeout(resolve, 30));
+                log('6. After 30ms delay await', 'async');
+            }
+
+            asyncFunc();
+
+            Promise.resolve().then(() => {
+                log('3b. Promise.then #2 (microtask)', 'microtask');
+            });
+
+            log('2b. Synchronous end', 'sync');
+        }
+
+        // Run demo 1 on page load
+        window.onload = () => {
+            setTimeout(() => runDemo1(), 500);
+        };
+    </script>
+</body>
+</html>

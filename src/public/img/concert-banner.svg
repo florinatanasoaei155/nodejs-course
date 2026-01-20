@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200">
+  <rect width="800" height="200" fill="#1a1a2e"/>
+  <circle cx="400" cy="50" r="80" fill="#e91e63" opacity="0.3"/>
+  <circle cx="200" cy="100" r="40" fill="#9c27b0" opacity="0.4"/>
+  <circle cx="600" cy="80" r="60" fill="#673ab7" opacity="0.3"/>
+  <text x="400" y="120" text-anchor="middle" fill="white" font-family="Arial" font-size="36" font-weight="bold">LIVE CONCERTS</text>
+  <text x="400" y="160" text-anchor="middle" fill="#e91e63" font-family="Arial" font-size="18">Experience the music</text>
+</svg>
