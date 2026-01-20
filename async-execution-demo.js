@@ -169,21 +169,22 @@ function demo1_basicOrder() {
 }
 
 // ============================================================================
-// DEMO 2: Promise Chains & process.nextTick
+// DEMO 2: Promise Chains & process.nextTick - Understanding Queue Timing
 // ============================================================================
 async function demo2_promiseChains() {
   await wait(150); // Wait for demo 1 to complete
-  separator('DEMO 2: Promise Chains & process.nextTick Comparison');
+  separator('DEMO 2: Promise Chains & process.nextTick - Understanding Queue Timing');
   initTimer();
 
-  log('Starting promise chain', OP_TYPES.SYNC, 'Synchronous setup');
+  log('Starting demo', OP_TYPES.SYNC, 'Synchronous setup');
 
+  // This Promise.resolve() immediately queues the first .then() during sync execution
   Promise.resolve('Step 1')
     .then((result) => {
       log(
         `Promise resolved: ${result}`,
         OP_TYPES.MICROTASK,
-        'Each .then() is a microtask',
+        'Queued during sync phase',
       );
       return 'Step 2';
     })
@@ -191,23 +192,20 @@ async function demo2_promiseChains() {
       log(
         `Promise resolved: ${result}`,
         OP_TYPES.MICROTASK,
-        'Chained microtask',
+        'Queued by previous .then()',
       );
       return 'Step 3';
     })
     .then((result) => {
-      log(
-        `Promise resolved: ${result}`,
-        OP_TYPES.MICROTASK,
-        'Final microtask',
-      );
+      log(`Promise resolved: ${result}`, OP_TYPES.MICROTASK, 'Final in chain');
     });
 
+  // These are queued AFTER the first Promise .then() was already queued
   process.nextTick(() => {
     log(
       'nextTick callback #1',
       OP_TYPES.NEXTTICK,
-      'Runs before Promise.then()',
+      'Queued after Promise started',
     );
   });
 
@@ -215,19 +213,15 @@ async function demo2_promiseChains() {
     log(
       'queueMicrotask callback',
       OP_TYPES.MICROTASK,
-      'Similar to Promise.then()',
+      'Same queue as Promise.then()',
     );
   });
 
   process.nextTick(() => {
-    log(
-      'nextTick callback #2',
-      OP_TYPES.NEXTTICK,
-      'Still before Promises',
-    );
+    log('nextTick callback #2', OP_TYPES.NEXTTICK, 'Second nextTick');
   });
 
-  log('Promise chain registered', OP_TYPES.SYNC, 'Setup complete');
+  log('Sync code ends', OP_TYPES.SYNC, 'All operations queued');
 
   setTimeout(() => {
     log(
@@ -238,14 +232,67 @@ async function demo2_promiseChains() {
   }, 0);
 
   console.log(
-    `\n${colors.dim}Note: process.nextTick() has higher priority than Promise microtasks${colors.reset}\n`,
+    `\n${colors.yellow}What happened?${colors.reset}`,
+  );
+  console.log(
+    `${colors.dim}1. Promise.resolve() IMMEDIATELY queues first .then() during sync code${colors.reset}`,
+  );
+  console.log(
+    `${colors.dim}2. Then nextTick and queueMicrotask are called${colors.reset}`,
+  );
+  console.log(
+    `${colors.dim}3. But nextTick queue is processed BEFORE microtask queue? No!${colors.reset}`,
+  );
+  console.log(
+    `${colors.dim}4. Actually: First .then() was queued first, so it runs first${colors.reset}`,
+  );
+  console.log(
+    `${colors.dim}5. The order depends on WHEN each operation was queued, not just priority!${colors.reset}\n`,
   );
 }
 
 // ============================================================================
-// DEMO 3: Async/Await - Understanding the Transformation
+// DEMO 3: nextTick TRUE Priority - Proving It Runs First
 // ============================================================================
-async function demo3_asyncAwait() {
+async function demo3_nextTickPriority() {
+  await wait(150);
+  separator('DEMO 3: nextTick TRUE Priority - Proving It Runs First');
+  initTimer();
+
+  log('Starting priority test', OP_TYPES.SYNC, 'Registering in specific order');
+
+  // Register nextTick AFTER Promise to prove priority
+  Promise.resolve().then(() => {
+    log('Promise #1', OP_TYPES.MICROTASK, 'Registered first');
+  });
+
+  queueMicrotask(() => {
+    log('queueMicrotask', OP_TYPES.MICROTASK, 'Registered second');
+  });
+
+  // Register nextTick LAST but it should run FIRST
+  process.nextTick(() => {
+    log('nextTick', OP_TYPES.NEXTTICK, 'Registered last but runs FIRST!');
+  });
+
+  Promise.resolve().then(() => {
+    log('Promise #2', OP_TYPES.MICROTASK, 'Registered fourth');
+  });
+
+  log('Sync ends', OP_TYPES.SYNC, 'Now microtasks will run');
+
+  console.log(
+    `\n${colors.yellow}Expected: nextTick → Promise #1 → queueMicrotask → Promise #2${colors.reset}`,
+  );
+  console.log(
+    `${colors.dim}This proves: nextTick queue is drained BEFORE microtask queue${colors.reset}\n`,
+  );
+}
+
+// ============================================================================
+// DEMO 4: Async/Await - Understanding the Transformation
+// ============================================================================
+async function demo4_asyncAwait() {
   await wait(150);
   separator('DEMO 3: Async/Await - Understanding the Transformation');
   initTimer();
@@ -253,18 +300,10 @@ async function demo3_asyncAwait() {
   log('Before async function call', OP_TYPES.SYNC, 'Main thread execution');
 
   async function asyncExample() {
-    log(
-      'Async function starts',
-      OP_TYPES.SYNC,
-      'Before await = synchronous',
-    );
+    log('Async function starts', OP_TYPES.SYNC, 'Before await = synchronous');
 
     await Promise.resolve();
-    log(
-      'After first await',
-      OP_TYPES.MICROTASK,
-      'await transforms to .then()',
-    );
+    log('After first await', OP_TYPES.MICROTASK, 'await transforms to .then()');
 
     await wait(50);
     log('After await with 50ms delay', OP_TYPES.TIMER, 'Delayed continuation');
@@ -307,11 +346,11 @@ async function demo3_asyncAwait() {
 }
 
 // ============================================================================
-// DEMO 4: setImmediate vs setTimeout vs process.nextTick
+// DEMO 5: setImmediate vs setTimeout vs process.nextTick
 // ============================================================================
-async function demo4_setImmediateComparison() {
+async function demo5_setImmediateComparison() {
   await wait(200);
-  separator('DEMO 4: setImmediate vs setTimeout vs process.nextTick');
+  separator('DEMO 5: setImmediate vs setTimeout vs process.nextTick');
   initTimer();
 
   log('Synchronous start', OP_TYPES.SYNC, 'Call stack execution');
@@ -329,11 +368,7 @@ async function demo4_setImmediateComparison() {
   });
 
   process.nextTick(() => {
-    log(
-      'process.nextTick',
-      OP_TYPES.NEXTTICK,
-      'Highest priority microtask',
-    );
+    log('process.nextTick', OP_TYPES.NEXTTICK, 'Highest priority microtask');
   });
 
   Promise.resolve().then(() => {
@@ -351,11 +386,11 @@ async function demo4_setImmediateComparison() {
 }
 
 // ============================================================================
-// DEMO 5: Mixed - Everything Together
+// DEMO 6: Mixed - Everything Together
 // ============================================================================
-async function demo5_mixed() {
+async function demo6_mixed() {
   await wait(200);
-  separator('DEMO 5: Mixed - Everything Together');
+  separator('DEMO 6: Mixed - Everything Together');
   initTimer();
 
   log('1. Synchronous start', OP_TYPES.SYNC, 'Main execution begins');
@@ -382,11 +417,7 @@ async function demo5_mixed() {
   }, 30);
 
   setImmediate(() => {
-    log(
-      'setImmediate executed',
-      OP_TYPES.IMMEDIATE,
-      'Check phase execution',
-    );
+    log('setImmediate executed', OP_TYPES.IMMEDIATE, 'Check phase execution');
   });
 
   // Microtask - Promise
@@ -410,11 +441,7 @@ async function demo5_mixed() {
     log('After await', OP_TYPES.MICROTASK, 'Continuation as microtask');
 
     setTimeout(() => {
-      log(
-        'setTimeout in async',
-        OP_TYPES.TIMER,
-        'Timer scheduled from async',
-      );
+      log('setTimeout in async', OP_TYPES.TIMER, 'Timer scheduled from async');
     }, 0);
 
     await wait(20);
@@ -444,11 +471,11 @@ async function demo5_mixed() {
 }
 
 // ============================================================================
-// DEMO 6: I/O Operations & File System
+// DEMO 7: I/O Operations & File System
 // ============================================================================
-async function demo6_ioOperations() {
+async function demo7_ioOperations() {
   await wait(200);
-  separator('DEMO 6: I/O Operations & Event Loop Phases');
+  separator('DEMO 7: I/O Operations & Event Loop Phases');
   initTimer();
 
   const fs = require('fs');
@@ -457,11 +484,7 @@ async function demo6_ioOperations() {
 
   // File system operation (I/O)
   fs.readFile(__filename, () => {
-    log(
-      'fs.readFile callback',
-      OP_TYPES.IO,
-      'I/O callback from Poll phase',
-    );
+    log('fs.readFile callback', OP_TYPES.IO, 'I/O callback from Poll phase');
 
     process.nextTick(() => {
       log(
@@ -508,18 +531,14 @@ async function demo6_ioOperations() {
 }
 
 // ============================================================================
-// DEMO 7: Real-world Example - API Simulation with All Patterns
+// DEMO 8: Real-world Example - API Simulation with All Patterns
 // ============================================================================
-async function demo7_realWorld() {
+async function demo8_realWorld() {
   await wait(300);
-  separator('DEMO 7: Real-world API Patterns - Sequential vs Parallel');
+  separator('DEMO 8: Real-world API Patterns - Sequential vs Parallel');
   initTimer();
 
-  log(
-    'Starting API request simulation',
-    OP_TYPES.SYNC,
-    'Application startup',
-  );
+  log('Starting API request simulation', OP_TYPES.SYNC, 'Application startup');
 
   // Simulate fetching user data
   async function fetchUser(userId) {
@@ -541,11 +560,7 @@ async function demo7_realWorld() {
 
     await wait(40); // Simulate network delay
 
-    log(
-      `Posts for user ${userId} fetched`,
-      OP_TYPES.TIMER,
-      'Query completed',
-    );
+    log(`Posts for user ${userId} fetched`, OP_TYPES.TIMER, 'Query completed');
     return [
       { id: 1, title: 'Post 1' },
       { id: 2, title: 'Post 2' },
@@ -553,11 +568,7 @@ async function demo7_realWorld() {
   }
 
   // Sequential execution (SLOW - 70ms total)
-  log(
-    'PATTERN 1: Sequential API calls',
-    OP_TYPES.SYNC,
-    'One after another',
-  );
+  log('PATTERN 1: Sequential API calls', OP_TYPES.SYNC, 'One after another');
   const seqStart = Date.now();
   const user1 = await fetchUser(1);
   const posts1 = await fetchPosts(user1.id);
@@ -568,11 +579,7 @@ async function demo7_realWorld() {
   );
 
   // Parallel execution (FAST - 40ms total)
-  log(
-    '\nPATTERN 2: Parallel API calls',
-    OP_TYPES.SYNC,
-    'All at once',
-  );
+  log('\nPATTERN 2: Parallel API calls', OP_TYPES.SYNC, 'All at once');
   const parStart = Date.now();
   const [user2, user3] = await Promise.all([fetchUser(2), fetchUser(3)]);
   log(
@@ -582,20 +589,14 @@ async function demo7_realWorld() {
   );
 
   // Race pattern (returns first result)
-  log(
-    '\nPATTERN 3: Promise.race (first wins)',
-    OP_TYPES.SYNC,
-    'Competition',
-  );
+  log('\nPATTERN 3: Promise.race (first wins)', OP_TYPES.SYNC, 'Competition');
   const winner = await Promise.race([
     fetchUser(4),
     wait(100).then(() => ({ id: 0, name: 'Timeout' })),
   ]);
   log(`Winner: ${winner.name}`, OP_TYPES.MICROTASK, 'Fastest response');
 
-  console.log(
-    `\n${colors.yellow}Use Cases:${colors.reset}`,
-  );
+  console.log(`\n${colors.yellow}Use Cases:${colors.reset}`);
   console.log(
     `  ${colors.green}Sequential${colors.reset}: When next request depends on previous result`,
   );
@@ -614,14 +615,16 @@ async function main() {
   console.log(`${colors.bright}${colors.cyan}`);
   console.log('╔════════════════════════════════════════════════════════════╗');
   console.log('║                                                            ║');
-  console.log('║   Node.js Event Loop - Complete Visual Demonstration      ║');
+  console.log('║   Node.js Event Loop - Complete Visual Demonstration       ║');
   console.log('║                                                            ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(colors.reset);
 
   printEventLoopDiagram();
 
-  console.log(`${colors.bright}${colors.yellow}Operation Types & Badges:${colors.reset}`);
+  console.log(
+    `${colors.bright}${colors.yellow}Operation Types & Badges:${colors.reset}`,
+  );
   console.log(
     `  ${OP_TYPES.SYNC.color}${colors.bright}[${OP_TYPES.SYNC.badge}]${colors.reset} P${OP_TYPES.SYNC.priority} - Synchronous code (Call Stack)`,
   );
@@ -643,11 +646,12 @@ async function main() {
 
   demo1_basicOrder();
   await demo2_promiseChains();
-  await demo3_asyncAwait();
-  await demo4_setImmediateComparison();
-  await demo5_mixed();
-  await demo6_ioOperations();
-  await demo7_realWorld();
+  await demo3_nextTickPriority();
+  await demo4_asyncAwait();
+  await demo5_setImmediateComparison();
+  await demo6_mixed();
+  await demo7_ioOperations();
+  await demo8_realWorld();
 
   await wait(500);
 
@@ -658,7 +662,9 @@ async function main() {
 // Event Loop Diagram (from Node.js docs)
 // ============================================================================
 function printEventLoopDiagram() {
-  console.log(`${colors.bright}${colors.cyan}Node.js Event Loop Phases:${colors.reset}`);
+  console.log(
+    `${colors.bright}${colors.cyan}Node.js Event Loop Phases:${colors.reset}`,
+  );
   console.log(`${colors.dim}
    ┌───────────────────────────┐
 ┌─>│           timers          │  setTimeout(), setInterval()
@@ -692,14 +698,18 @@ ${colors.reset}\n`);
 function printDetailedSummary() {
   separator('Summary - Complete Event Loop Execution Priority');
 
-  console.log(`${colors.bright}${colors.cyan}EXECUTION ORDER (Priority from highest to lowest):${colors.reset}\n`);
+  console.log(
+    `${colors.bright}${colors.cyan}EXECUTION ORDER (Priority from highest to lowest):${colors.reset}\n`,
+  );
 
   console.log(
     `${colors.bright}P1 - SYNCHRONOUS CODE${colors.reset} ${OP_TYPES.SYNC.color}[SYNC]${colors.reset}`,
   );
   console.log(`  • Executes immediately on the call stack`);
   console.log(`  • Blocks all other operations until complete`);
-  console.log(`  • ${colors.yellow}Use for:${colors.reset} Variable declarations, function calls, calculations`);
+  console.log(
+    `  • ${colors.yellow}Use for:${colors.reset} Variable declarations, function calls, calculations`,
+  );
   console.log(
     `  • ${colors.red}Avoid for:${colors.reset} Heavy computations (blocks event loop)\n`,
   );
@@ -786,7 +796,9 @@ function printDetailedSummary() {
 
   separator('Real-World Use Cases by Operation Type');
 
-  console.log(`${colors.bright}${colors.green}WHEN TO USE EACH:${colors.reset}\n`);
+  console.log(
+    `${colors.bright}${colors.green}WHEN TO USE EACH:${colors.reset}\n`,
+  );
 
   console.log(`${colors.cyan}Synchronous Code:${colors.reset}`);
   console.log(`  ✓ Simple calculations and transformations`);
@@ -822,19 +834,23 @@ function printDetailedSummary() {
   console.log(`  ✓ Sequential async operations (clean code)`);
   console.log(`  ✓ Error handling with try/catch`);
   console.log(`  ✓ Conditional async logic`);
-  console.log(
-    `  ✓ Use Promise.all() for parallel operations\n`,
-  );
+  console.log(`  ✓ Use Promise.all() for parallel operations\n`);
 
   separator('Performance Tips');
 
-  console.log(`${colors.bright}${colors.yellow}OPTIMIZATION STRATEGIES:${colors.reset}\n`);
+  console.log(
+    `${colors.bright}${colors.yellow}OPTIMIZATION STRATEGIES:${colors.reset}\n`,
+  );
 
   console.log(`${colors.green}1. Parallel vs Sequential:${colors.reset}`);
-  console.log(`   ${colors.dim}// SLOW (Sequential - 200ms total)${colors.reset}`);
+  console.log(
+    `   ${colors.dim}// SLOW (Sequential - 200ms total)${colors.reset}`,
+  );
   console.log(`   const user = await fetchUser();`);
   console.log(`   const posts = await fetchPosts();  // Waits for user first`);
-  console.log(`\n   ${colors.dim}// FAST (Parallel - 100ms total)${colors.reset}`);
+  console.log(
+    `\n   ${colors.dim}// FAST (Parallel - 100ms total)${colors.reset}`,
+  );
   console.log(`   const [user, posts] = await Promise.all([`);
   console.log(`     fetchUser(),`);
   console.log(`     fetchPosts()  // Runs simultaneously`);
@@ -842,19 +858,23 @@ function printDetailedSummary() {
 
   console.log(`${colors.green}2. Don't Block the Event Loop:${colors.reset}`);
   console.log(`   ${colors.red}✗ Bad:${colors.reset} Long synchronous loops`);
-  console.log(`   ${colors.green}✓ Good:${colors.reset} Break up work with setImmediate()\n`);
+  console.log(
+    `   ${colors.green}✓ Good:${colors.reset} Break up work with setImmediate()\n`,
+  );
 
   console.log(`${colors.green}3. Use the Right Tool:${colors.reset}`);
   console.log(`   ${colors.dim}// In I/O callback context:${colors.reset}`);
   console.log(`   fs.readFile('file.txt', () => {`);
-  console.log(
-    `     setImmediate(() => process());  // Better than setTimeout`,
-  );
+  console.log(`     setImmediate(() => process());  // Better than setTimeout`);
   console.log(`   });\n`);
 
   console.log(`${colors.green}4. Avoid nextTick Recursion:${colors.reset}`);
-  console.log(`   ${colors.red}✗ Bad:${colors.reset} Recursive nextTick starves I/O`);
-  console.log(`   ${colors.green}✓ Good:${colors.reset} Use setImmediate for recursion\n`);
+  console.log(
+    `   ${colors.red}✗ Bad:${colors.reset} Recursive nextTick starves I/O`,
+  );
+  console.log(
+    `   ${colors.green}✓ Good:${colors.reset} Use setImmediate for recursion\n`,
+  );
 
   console.log(`${colors.bright}${colors.cyan}KEY TAKEAWAYS:${colors.reset}`);
   console.log(`  • Lower priority number = executes first`);
