@@ -294,7 +294,7 @@ async function demo3_nextTickPriority() {
 // ============================================================================
 async function demo4_asyncAwait() {
   await wait(150);
-  separator('DEMO 3: Async/Await - Understanding the Transformation');
+  separator('DEMO 4: Async/Await - Understanding the Transformation');
   initTimer();
 
   log('Before async function call', OP_TYPES.SYNC, 'Main thread execution');
