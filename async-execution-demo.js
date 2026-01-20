@@ -171,8 +171,7 @@ function demo1_basicOrder() {
 // ============================================================================
 // DEMO 2: Promise Chains & process.nextTick - Understanding Queue Timing
 // ============================================================================
-async function demo2_promiseChains() {
-  await wait(150); // Wait for demo 1 to complete
+function demo2_promiseChains() {
   separator('DEMO 2: Promise Chains & process.nextTick - Understanding Queue Timing');
   initTimer();
 
@@ -184,7 +183,7 @@ async function demo2_promiseChains() {
       log(
         `Promise resolved: ${result}`,
         OP_TYPES.MICROTASK,
-        'Queued during sync phase',
+        'First in promise chain',
       );
       return 'Step 2';
     })
@@ -192,7 +191,7 @@ async function demo2_promiseChains() {
       log(
         `Promise resolved: ${result}`,
         OP_TYPES.MICROTASK,
-        'Queued by previous .then()',
+        'Second in chain',
       );
       return 'Step 3';
     })
@@ -200,12 +199,12 @@ async function demo2_promiseChains() {
       log(`Promise resolved: ${result}`, OP_TYPES.MICROTASK, 'Final in chain');
     });
 
-  // These are queued AFTER the first Promise .then() was already queued
+  // These are queued AFTER the first Promise, but nextTick has HIGHER PRIORITY
   process.nextTick(() => {
     log(
       'nextTick callback #1',
       OP_TYPES.NEXTTICK,
-      'Queued after Promise started',
+      'Should run BEFORE all Promises!',
     );
   });
 
@@ -232,36 +231,23 @@ async function demo2_promiseChains() {
   }, 0);
 
   console.log(
-    `\n${colors.yellow}What happened?${colors.reset}`,
+    `\n${colors.yellow}Expected order: Sync → Sync → nextTick #1 → nextTick #2 → Promise Step 1 → queueMicrotask → Promise Step 2 → Promise Step 3 → setTimeout${colors.reset}`,
   );
   console.log(
-    `${colors.dim}1. Promise.resolve() IMMEDIATELY queues first .then() during sync code${colors.reset}`,
-  );
-  console.log(
-    `${colors.dim}2. Then nextTick and queueMicrotask are called${colors.reset}`,
-  );
-  console.log(
-    `${colors.dim}3. But nextTick queue is processed BEFORE microtask queue? No!${colors.reset}`,
-  );
-  console.log(
-    `${colors.dim}4. Actually: First .then() was queued first, so it runs first${colors.reset}`,
-  );
-  console.log(
-    `${colors.dim}5. The order depends on WHEN each operation was queued, not just priority!${colors.reset}\n`,
+    `${colors.dim}Why? nextTick queue is drained COMPLETELY before microtask queue!${colors.reset}\n`,
   );
 }
 
 // ============================================================================
 // DEMO 3: nextTick TRUE Priority - Proving It Runs First
 // ============================================================================
-async function demo3_nextTickPriority() {
-  await wait(150);
+function demo3_nextTickPriority() {
   separator('DEMO 3: nextTick TRUE Priority - Proving It Runs First');
   initTimer();
 
   log('Starting priority test', OP_TYPES.SYNC, 'Registering in specific order');
 
-  // Register nextTick AFTER Promise to prove priority
+  // Register Promise FIRST
   Promise.resolve().then(() => {
     log('Promise #1', OP_TYPES.MICROTASK, 'Registered first');
   });
@@ -270,7 +256,7 @@ async function demo3_nextTickPriority() {
     log('queueMicrotask', OP_TYPES.MICROTASK, 'Registered second');
   });
 
-  // Register nextTick LAST but it should run FIRST
+  // Register nextTick LAST but it should run FIRST (proving priority!)
   process.nextTick(() => {
     log('nextTick', OP_TYPES.NEXTTICK, 'Registered last but runs FIRST!');
   });
@@ -279,13 +265,13 @@ async function demo3_nextTickPriority() {
     log('Promise #2', OP_TYPES.MICROTASK, 'Registered fourth');
   });
 
-  log('Sync ends', OP_TYPES.SYNC, 'Now microtasks will run');
+  log('Sync ends', OP_TYPES.SYNC, 'Now async callbacks will run');
 
   console.log(
     `\n${colors.yellow}Expected: nextTick → Promise #1 → queueMicrotask → Promise #2${colors.reset}`,
   );
   console.log(
-    `${colors.dim}This proves: nextTick queue is drained BEFORE microtask queue${colors.reset}\n`,
+    `${colors.dim}This proves: nextTick queue is drained BEFORE microtask queue, regardless of registration order!${colors.reset}\n`,
   );
 }
 
@@ -348,8 +334,7 @@ async function demo4_asyncAwait() {
 // ============================================================================
 // DEMO 5: setImmediate vs setTimeout vs process.nextTick
 // ============================================================================
-async function demo5_setImmediateComparison() {
-  await wait(200);
+function demo5_setImmediateComparison() {
   separator('DEMO 5: setImmediate vs setTimeout vs process.nextTick');
   initTimer();
 
@@ -378,7 +363,7 @@ async function demo5_setImmediateComparison() {
   log('Synchronous end', OP_TYPES.SYNC, 'Call stack complete');
 
   console.log(
-    `\n${colors.yellow}Expected order: Sync → nextTick → Promise → setTimeout/setImmediate${colors.reset}`,
+    `\n${colors.yellow}Expected order: Sync → Sync → nextTick → Promise → setTimeout/setImmediate${colors.reset}`,
   );
   console.log(
     `${colors.dim}Note: setTimeout vs setImmediate order can vary depending on context${colors.reset}\n`,
@@ -645,10 +630,10 @@ async function main() {
   );
 
   demo1_basicOrder();
-  await demo2_promiseChains();
-  await demo3_nextTickPriority();
+  setTimeout(() => demo2_promiseChains(), 150);
+  setTimeout(() => demo3_nextTickPriority(), 300);
+  setTimeout(() => demo5_setImmediateComparison(), 450);
   await demo4_asyncAwait();
-  await demo5_setImmediateComparison();
   await demo6_mixed();
   await demo7_ioOperations();
   await demo8_realWorld();
